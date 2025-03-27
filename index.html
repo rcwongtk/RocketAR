@@ -5,6 +5,7 @@
     <title>Rocket Launch with MindAR</title>
     <script src="https://aframe.io/releases/1.4.1/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/aframe-particle-system-component@1.0.9/dist/aframe-particle-system-component.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.css" />
     <style>
       body {
@@ -64,6 +65,9 @@
           <a-asset-item id="rocketModel" src="rocket.glb"></a-asset-item>
         </a-assets>
 
+        <!-- Static parent for launched rocket (jitter-free!) -->
+        <a-entity id="rocketSpawnRoot"></a-entity>
+
         <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
         <a-entity mindar-image-target="targetIndex: 0">
@@ -71,6 +75,13 @@
                     gltf-model="#rocketModel"
                     scale="0.2 0.2 0.2"
                     position="0 0 0">
+          </a-entity>
+
+          <!-- Optional smoke effect -->
+          <a-entity id="smoke"
+                    position="0 -0.2 0"
+                    particle-system="preset: dust; particleCount: 100; size: 0.2; opacity: 0.6; color: #888888"
+                    visible="false">
           </a-entity>
         </a-entity>
       </a-scene>
@@ -81,11 +92,14 @@
       AFRAME.registerComponent('launch-on-detect', {
         init: function () {
           const rocket = document.querySelector('#rocket');
+          const smoke = document.querySelector('#smoke');
           const imageTarget = this.el;
           const launchBtn = document.getElementById('launchBtn');
           const resetBtn = document.getElementById('resetBtn');
+          const rocketSpawnRoot = document.getElementById('rocketSpawnRoot');
 
           let launched = false;
+          let originalParent = rocket.parentElement;
 
           function showButtons() {
             launchBtn.style.display = 'inline-block';
@@ -109,6 +123,18 @@
             if (launched) return;
             launched = true;
 
+            // Detach rocket from target and add to world root
+            const worldPos = new THREE.Vector3();
+            const worldQuat = new THREE.Quaternion();
+            rocket.object3D.getWorldPosition(worldPos);
+            rocket.object3D.getWorldQuaternion(worldQuat);
+
+            rocketSpawnRoot.object3D.position.copy(worldPos);
+            rocketSpawnRoot.object3D.quaternion.copy(worldQuat);
+            rocketSpawnRoot.appendChild(rocket);
+
+            rocket.setAttribute('position', '0 0 0'); // reset local pos inside new root
+
             rocket.setAttribute('animation__launch', {
               property: 'position',
               to: '0 5 -5',
@@ -122,16 +148,25 @@
               dur: 4000,
               easing: 'linear'
             });
+
+            if (smoke) smoke.setAttribute('visible', true);
+            setTimeout(() => {
+              if (smoke) smoke.setAttribute('visible', false);
+            }, 4000);
           });
 
           resetBtn.addEventListener('click', () => {
             launched = false;
 
+            // Reset rocket position and reattach to image target
+            rocket.removeAttribute('animation__launch');
+            rocket.removeAttribute('animation__fade');
             rocket.setAttribute('position', '0 0 0');
             rocket.setAttribute('material', 'opacity: 1');
 
-            rocket.removeAttribute('animation__launch');
-            rocket.removeAttribute('animation__fade');
+            originalParent.appendChild(rocket);
+
+            if (smoke) smoke.setAttribute('visible', false);
           });
         }
       });
@@ -141,4 +176,3 @@
 
   </body>
 </html>
-
